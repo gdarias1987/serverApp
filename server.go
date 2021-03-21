@@ -2,10 +2,15 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"net/http"
+	"os"
 
 	"github.com/gdarias1987/serverApp/controller"
+	"github.com/gdarias1987/serverApp/middlewares"
 	"github.com/gdarias1987/serverApp/service"
 	"github.com/gin-gonic/gin"
+	gindump "github.com/tpkeeper/gin-dump"
 )
 
 var (
@@ -13,9 +18,19 @@ var (
 	VideoController controller.VideoController = controller.New(videoService)
 )
 
+func setupLogOutput() {
+	f, _ := os.Create("gin.log")
+	gin.DefaultWriter = io.MultiWriter(f, os.Stdout)
+}
+
 func main() {
-	server := gin.Default()
-	gin.SetMode(gin.ReleaseMode)
+
+	setupLogOutput()
+
+	server := gin.New()
+
+	server.Use(gin.Recovery(), middlewares.Logger(),
+		middlewares.BasicAuth(), gindump.Dump())
 
 	server.GET("/test", func(ctx *gin.Context) {
 		ctx.JSON(200, gin.H{
@@ -28,7 +43,16 @@ func main() {
 	})
 
 	server.POST("/videos", func(ctx *gin.Context) {
-		ctx.JSON(200, VideoController.Save(ctx))
+		err := VideoController.Save(ctx)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{
+				"err": err.Error(),
+			})
+		} else {
+			ctx.JSON(http.StatusOK, gin.H{
+				"message": "video added succesfully",
+			})
+		}
 	})
 
 	server.Run(":8080")
